@@ -3317,7 +3317,13 @@ struct server_context {
                     }
 
                     // add prompt tokens for processing in the current batch
-                    while (slot.n_past < slot.n_prompt_tokens && batch.n_tokens < n_batch) {
+                    // limit tokens per slot to ensure fairness across multiple slots
+                    // this prevents large prompts from blocking other slots (issue #6607)
+                    const int max_tokens_per_slot = std::max(1, n_batch / 4);
+                    int tokens_added_this_slot = 0;
+                    while (slot.n_past < slot.n_prompt_tokens && 
+                           batch.n_tokens < n_batch && 
+                           tokens_added_this_slot < max_tokens_per_slot) {
                         // get next token to process
                         llama_token cur_tok = slot.prompt_tokens[slot.n_past];
                         if (cur_tok == LLAMA_TOKEN_NULL) {
@@ -3332,6 +3338,7 @@ struct server_context {
 
                         slot.n_prompt_tokens_processed++;
                         slot.n_past++;
+                        tokens_added_this_slot++;
                     }
 
                     // SLT_INF(slot, "new cache_tokens: %s\n", slot.cache_tokens.str().c_str());
